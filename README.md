@@ -56,7 +56,7 @@ live-translate config               # creates config.toml and prints its path: p
 
 The keys can instead come from the `ELEVENLABS_API_KEY` and `ANTHROPIC_API_KEY` environment
 variables, which win over the file. On Windows the config file is
-`%APPDATA%\live-translate\config.toml`; on Linux `~/.config/live-translate/config.toml`; on macOS
+`%LOCALAPPDATA%\live-translate\config.toml`; on Linux `~/.config/live-translate/config.toml`; on macOS
 `~/Library/Application Support/live-translate/config.toml`.
 
 Updating: `uv tool upgrade mpv-live-translate`, then run `live-translate install-mpv-script` again.
