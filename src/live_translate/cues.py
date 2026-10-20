@@ -1,13 +1,7 @@
-"""Build an .srt subtitle file from a saved Scribe JSON response (no API call).
+"""Group Scribe word tokens into subtitle cues and write them as .srt."""
 
-Usage: uv run srt.py outputs/elevenlabs_scribe_v2/test.json
-"""
-
-import argparse
-import json
 import textwrap
 from dataclasses import dataclass
-from pathlib import Path
 
 MAX_LINES = 2
 MAX_CUE_S = 6.0
@@ -95,27 +89,18 @@ def timestamp(seconds):
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
 
-def write_srt(cues, path, line_chars=LATIN.line_chars):
+def format_srt(cues, line_chars=LATIN.line_chars):
     blocks = []
     for i, (start, end, text) in enumerate(cues, 1):
         lines = "\n".join(textwrap.wrap(text, line_chars))
         blocks.append(f"{i}\n{timestamp(start)} --> {timestamp(end)}\n{lines}\n")
-    path.write_text("\n".join(blocks))
+    return "\n".join(blocks)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("json_file", type=Path)
-    args = parser.parse_args()
-
-    data = json.loads(args.json_file.read_text())
-    layout = layout_for(data.get("language_code"))
-    cues = build_cues(data["words"], layout)
-
-    out = args.json_file.with_suffix(".srt")
-    write_srt(cues, out, layout.line_chars)
-    print(f"{len(cues)} cues -> {out}")
-
-
-if __name__ == "__main__":
-    main()
+def join_cues(cue_lists):
+    """Concatenate per-window cue lists (in time order) so no cue runs into the next one."""
+    joined = [cue for cues in cue_lists for cue in cues]
+    return [
+        (start, min(end, joined[i + 1][0]) if i + 1 < len(joined) else end, text)
+        for i, (start, end, text) in enumerate(joined)
+    ]
