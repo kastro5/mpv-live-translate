@@ -14,6 +14,7 @@ from . import config as cfg
 from .audio import AudioError, Ffmpeg
 from .debuglog import DebugLog
 from .session import FatalError, Session
+from .stream import LinkError, log_stem
 
 
 def providers(config, fake):
@@ -46,14 +47,14 @@ async def generate(args):
 
     log = None
     if args.debug or config.debug:
-        log = DebugLog(cfg.cache_dir() / "logs" / f"{args.file.stem}-{time.strftime('%Y%m%d-%H%M%S')}.log", echo=print)
+        log = DebugLog(cfg.cache_dir() / "logs" / f"{log_stem(args.file)}-{time.strftime('%Y%m%d-%H%M%S')}.log", echo=print)
         print(f"Debug log: {log.path}")
     session = Session(
         args.file, config, transcriber, translator, Ffmpeg(args.ffmpeg), cfg.cache_dir(),
         on_update=progress, on_message=lambda text: print(f"  {text}"), debug=log,
     )
     await session.prepare()
-    print(f"{args.file}: {session.duration / 60:.1f} min, {len(session.starts)} windows, {len(session.results)} cached")
+    print(f"{session.name}: {session.duration / 60:.1f} min, {len(session.starts)} windows, {len(session.results)} cached")
     await session.run(until_complete=True)
     for kind, path in session.outputs.items():
         print(f"{kind}: {path}")
@@ -97,12 +98,12 @@ def main(argv=None):
         p.add_argument("--debug", action="store_true", help="show what each step is doing and write a log file")
 
     p = sub.add_parser("generate", help="write subtitles for a whole file")
-    p.add_argument("file", type=Path)
+    p.add_argument("file", help="video file or direct http(s) link")
     common(p)
 
     p = sub.add_parser("serve", help="follow an mpv player (started by live-translate.lua)")
     p.add_argument("--ipc", required=True, help="mpv input-ipc-server path")
-    p.add_argument("--file", required=True, type=Path)
+    p.add_argument("--file", required=True, help="video file or direct http(s) link")
     common(p)
 
     sub.add_parser("setup", help="guided first-time setup: API keys, language, model, mpv script")
@@ -131,7 +132,7 @@ def main(argv=None):
             from .install import install
 
             install(args.mpv_dir)
-    except (cfg.ConfigError, AudioError, FatalError) as e:
+    except (cfg.ConfigError, AudioError, LinkError, FatalError) as e:
         sys.exit(f"live-translate: {e}")
     except KeyboardInterrupt:
         sys.exit(130)

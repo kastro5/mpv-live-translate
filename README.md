@@ -126,6 +126,30 @@ live-translate generate movie.mkv
 
 That fills the same cache, so playing the file afterwards is instant and free.
 
+### Links (PikPak and other direct links)
+
+Direct `http(s)` links to a video file work too, for example a cloud drive's download link:
+
+1. In PikPak, use **Copy link** on the video.
+2. Open mpv with no file (double-click `mpv.exe` on Windows) and press <kbd>Ctrl</kbd>+<kbd>V</kbd>
+   to play the copied link.
+3. Press <kbd>Ctrl</kbd>+<kbd>T</kbd> as usual.
+
+Things that differ from local files:
+
+- The subtitle files go in the cache folder, named after the video (the debug log
+  shows the path). Opening a fresh link to the same video later reuses everything already done, and so does
+  downloading the video, because both are identified by their content.
+- ffmpeg downloads the stretch it is working on separately from mpv: about 1.3× the data of the part
+  you watch, on top of mpv's own download. Fine on a fast connection. On a slow one it may compete with
+  playback.
+- Links like PikPak's expire after a day or two. If one expires mid-way, live-translate stops and
+  says so. Copy a fresh link and open it again.
+- The link has to point at the video file itself and allow seeking. Web pages (YouTube and the
+  like) don't work.
+
+`live-translate generate "<link>"` works on links as well.
+
 ## Settings
 
 `live-translate setup` covers the common ones. For the rest, `live-translate config --edit` opens
@@ -163,6 +187,7 @@ the keys (`key=ctrl+t`, `debug_key=ctrl+T`) and the paths `install-mpv-script` w
   `input.conf` may also use Ctrl+T; change `key=` in `live_translate.conf`.
 - **"could not run 'live-translate'":** run `live-translate install-mpv-script` again so the script
   knows where the command is.
+- **"the link stopped working":** the link expired. Copy a fresh one and open it again.
 - **"Missing … API key" or a quota/credits message:** run `live-translate setup`, or top up the
   account it names.
 - **Anything else:** turn on debug, reproduce it, and attach the log file to an issue.
@@ -174,7 +199,7 @@ Anthropic. Nothing is sent until you press the key.
 
 ## Limitations
 
-- Local files only (no streams or URLs yet).
+- Live streams and web pages (YouTube etc.) aren't supported, only files and direct links to them.
 - If a subtitle file with the same name already exists and wasn't written by this tool, it is left
   alone and the new one goes into the cache folder instead (still loaded into mpv).
 - Claude occasionally declines to translate a window. Those lines then appear only in the

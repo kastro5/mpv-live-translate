@@ -10,7 +10,7 @@ from pathlib import Path
 
 import anthropic
 
-from . import langs, scheduler
+from . import langs, scheduler, stream
 from .cache import Cache, file_key
 from .debuglog import clock, no_debug
 from .cues import build_cues, format_srt, join_cues, layout_for
@@ -42,7 +42,7 @@ class WindowResult:
 
 
 def _is_fatal(exc):
-    if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+    if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError, stream.LinkGone)):
         return True
     return getattr(exc, "status_code", None) in (401, 403)  # elevenlabs ApiError
 
@@ -62,7 +62,8 @@ class Session:
     def __init__(
         self, video, config, transcriber, translator, ffmpeg, cache_root, on_update=None, on_message=None, debug=None
     ):
-        self.video = Path(video)
+        self.video = str(video) if stream.is_url(video) else Path(video)
+        self.name = None if stream.is_url(video) else self.video.name
         self.config = config
         self.transcriber, self.translator, self.ffmpeg = transcriber, translator, ffmpeg
         self.cache_root = cache_root
@@ -87,8 +88,13 @@ class Session:
         self._claude = asyncio.Semaphore(CLAUDE_SLOTS)
 
     async def prepare(self, duration=None):
+        if stream.is_url(self.video):
+            remote = await asyncio.to_thread(stream.probe, self.video)
+            key, self.name = remote.key, remote.name
+        else:
+            key = file_key(self.video)
         self.duration = duration or await self.ffmpeg.duration(self.video)
-        self.cache = Cache(self.cache_root, file_key(self.video))
+        self.cache = Cache(self.cache_root, key)
         self.boundaries = nominal_boundaries(self.duration, self.config.window_s)
         self.starts = [0.0, *self.boundaries]
         source = self.config.source_language
@@ -98,7 +104,7 @@ class Session:
         for i in range(len(self.starts)):
             self._load_cached(i)
         self.debug(
-            f"{self.video.name}: {clock(self.duration)}, {len(self.starts)} windows, {len(self.results)} cached,"
+            f"{self.name}: {clock(self.duration)}, {len(self.starts)} windows, {len(self.results)} cached,"
             f" {self.config.mode} {self.config.lookahead_s:g}s, {self.translator.model} {self.translator.effort}"
         )
         if self.results:
@@ -339,9 +345,9 @@ class Session:
         done = [self.results[i] for i in sorted(self.results)]
         source_lang = langs.iso1(self.language or done[0].language)
         if not self.outputs:
-            self.outputs = {"translation": choose_path(self.video, self.target, self.cache)}
+            self.outputs = {"translation": choose_path(self.video, self.target, self.cache, self.name)}
             if source_lang != self.target:
-                self.outputs["source"] = choose_path(self.video, source_lang, self.cache)
+                self.outputs["source"] = choose_path(self.video, source_lang, self.cache, self.name)
             for kind, path in self.outputs.items():
                 self.debug(f"{kind} subtitles -> {path}")
 

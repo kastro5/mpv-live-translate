@@ -5,20 +5,33 @@ import json
 import os
 from pathlib import Path
 
-_SAMPLE = 1 << 20  # bytes hashed from each end of the file
+SAMPLE = 1 << 20  # bytes hashed from each end of the file
+
+
+def tail_start(size):
+    """Where the hashed last MB starts, or None if the first MB already covers the file."""
+    return max(SAMPLE, size - SAMPLE) if size > SAMPLE else None
+
+
+def content_key(size, head, tail):
+    h = hashlib.sha256(str(size).encode())
+    h.update(head)
+    h.update(tail)
+    return h.hexdigest()[:20]
 
 
 def file_key(path):
-    """Identity of a video that survives renames and moves: size plus its first and last MB."""
+    """Identity of a video that survives renames and moves: size plus its first and last MB.
+    stream.probe computes the same key over HTTP, so a link and the downloaded file share a cache."""
     path = Path(path)
     size = path.stat().st_size
-    h = hashlib.sha256(str(size).encode())
     with path.open("rb") as f:
-        h.update(f.read(_SAMPLE))
-        if size > _SAMPLE:
-            f.seek(max(_SAMPLE, size - _SAMPLE))
-            h.update(f.read(_SAMPLE))
-    return h.hexdigest()[:20]
+        head = f.read(SAMPLE)
+        tail = b""
+        if (start := tail_start(size)) is not None:
+            f.seek(start)
+            tail = f.read(SAMPLE)
+    return content_key(size, head, tail)
 
 
 def _span(start, end):

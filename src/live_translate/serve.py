@@ -1,13 +1,13 @@
 """`live-translate serve`: follow an mpv player and keep its subtitle tracks up to date."""
 
 import asyncio
-import os
 import time
 
 from python_mpv_jsonipc import MPVError
 
 from . import config as cfg
 from . import langs
+from .stream import log_stem, same_video
 from .audio import Ffmpeg
 from .debuglog import DebugLog, ass_panel, panel_lines
 from .mpv_ipc import Mpv, MpvGone
@@ -17,10 +17,6 @@ POLL_S = 1.0
 STOP_MESSAGE = "live-translate-stop"
 DEBUG_MESSAGE = "live-translate-debug"  # toggles the debug panel
 OVERLAY_ID = 47  # any id unique among this client's osd overlays
-
-
-def _same_file(a, b):
-    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
 
 
 def _clock(seconds):
@@ -60,7 +56,7 @@ class Tracks:
     async def _find(self, path):
         ids = [
             t["id"] for t in await self.mpv.get("track-list", [])
-            if t.get("type") == "sub" and t.get("external-filename") and _same_file(t["external-filename"], path)
+            if t.get("type") == "sub" and t.get("external-filename") and same_video(t["external-filename"], path)
         ]
         return max(ids) if ids else None
 
@@ -106,7 +102,7 @@ async def _serve(mpv, args, config, providers):
     debug = args.debug or config.debug
     log_path = None
     if debug:
-        log_path = cfg.cache_dir() / "logs" / f"{args.file.stem}-{time.strftime('%Y%m%d-%H%M%S')}.log"
+        log_path = cfg.cache_dir() / "logs" / f"{log_stem(args.file)}-{time.strftime('%Y%m%d-%H%M%S')}.log"
     log = DebugLog(log_path)
     tracks = Tracks(mpv, log)
     panel = {"visible": debug}
@@ -159,7 +155,7 @@ async def _serve(mpv, args, config, providers):
                 pass
             poll_now.clear()
             path = await mpv.get("path")
-            if not path or not _same_file(path, args.file):
+            if not path or not same_video(path, args.file):
                 log("mpv moved to another file")
                 session.stop()
                 return

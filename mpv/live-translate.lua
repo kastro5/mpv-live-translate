@@ -50,11 +50,14 @@ end
 
 local function start()
     local path = mp.get_property("path")
-    if not path or path:find("^%a[%w+.-]*://") then
-        mp.osd_message("live-translate: only local files are supported")
+    local scheme = path and path:match("^(%a[%w+.-]*)://")
+    if not path or (scheme and scheme:lower() ~= "http" and scheme:lower() ~= "https") then
+        mp.osd_message("live-translate: only local files and direct http(s) links are supported")
         return
     end
-    path = utils.join_path(mp.get_property("working-directory", ""), path)
+    if not scheme then
+        path = utils.join_path(mp.get_property("working-directory", ""), path)
+    end
 
     local args = { opts.executable, "serve", "--ipc", ipc_path(), "--file", path }
     if opts.ffmpeg ~= "" then

@@ -4,10 +4,14 @@ import os
 import time
 from pathlib import Path
 
+from .stream import is_url
 
-def choose_path(video, lang, cache):
+
+def choose_path(video, lang, cache, name=None):
     """movie.<lang>.srt next to the video (auto-loads in mpv), unless that file isn't ours
-    or the folder is read-only; then the cache dir."""
+    or the folder is read-only; then the cache dir. A link has no folder: always the cache dir."""
+    if is_url(video):
+        return cache.dir / f"{Path(name).stem}.{lang}.srt"
     video = Path(video)
     beside = video.with_name(f"{video.stem}.{lang}.srt")
     if beside.exists():
