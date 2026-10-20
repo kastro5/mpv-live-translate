@@ -22,6 +22,7 @@ SCRIBE_SLOTS = 2
 CLAUDE_SLOTS = 2
 MAX_ATTEMPTS = 3
 CONTEXT_CUES = 20  # cues of the previous window shown to Claude for continuity
+CONTEXT_WAIT_S = 30.0  # how long a window waits for an in-flight previous window's translation
 STOP_GRACE_S = 2.0  # let in-flight (already paid) requests land in the cache before exiting
 LOCK_PROBABILITY = 0.8
 LOCK_MIN_WORDS = 20
@@ -45,6 +46,17 @@ def _is_fatal(exc):
     return getattr(exc, "status_code", None) in (401, 403)  # elevenlabs ApiError
 
 
+def _describe(exc):
+    """The provider's own message (e.g. ElevenLabs quota_exceeded) instead of a dump of headers."""
+    body = getattr(exc, "body", None)
+    detail = body.get("detail") if isinstance(body, dict) else None
+    if isinstance(detail, dict) and detail.get("message"):
+        return detail["message"]
+    if isinstance(detail, str):
+        return detail
+    return str(exc)
+
+
 class Session:
     def __init__(self, video, config, transcriber, translator, ffmpeg, cache_root, on_update=None, on_message=None):
         self.video = Path(video)
@@ -62,6 +74,8 @@ class Session:
         self._attempts, self._retry_at = {}, {}
         self._seams = {}  # boundary -> task, so two windows never detect the same seam twice
         self._wake = asyncio.Event()
+        self._running = {}  # window index -> task
+        self._results_changed = asyncio.Event()
         self._stopping = False
         self._fatal = None
         self._scribe = asyncio.Semaphore(SCRIBE_SLOTS)
@@ -103,7 +117,7 @@ class Session:
     # --- main loop ------------------------------------------------------------------------
 
     async def run(self, until_complete=False):
-        running = {}
+        running = self._running
         while not self._stopping:
             now = time.monotonic()
             waiting = {i for i, at in self._retry_at.items() if at > now}
@@ -141,13 +155,13 @@ class Session:
             self._retry_at.pop(i, None)
             return
         if _is_fatal(exc):
-            self._fatal = FatalError(str(exc))
+            self._fatal = FatalError(_describe(exc))
             self.stop()
             return
         self._attempts[i] = self._attempts.get(i, 0) + 1
         if self._attempts[i] >= MAX_ATTEMPTS:
             self.failed.add(i)
-            self.on_message(f"Window {i + 1} failed: {exc}")
+            self.on_message(f"Window {i + 1} failed: {_describe(exc)}")
         else:
             self._retry_at[i] = time.monotonic() + 5 * self._attempts[i]
 
@@ -224,6 +238,7 @@ class Session:
         cues = build_cues(transcript["words"], layout_for(language))
         texts = self._cached_texts(language, cues, window)
         if texts is None:
+            await self._wait_for_previous(i)
             try:
                 async with self._claude:
                     texts, usage = await self.translator.translate(
@@ -239,7 +254,19 @@ class Session:
                 texts = None
 
         self.results[i] = WindowResult(window, language, cues, texts)
+        self._results_changed.set()
+        self._results_changed.clear()
         self._write_outputs()
+
+    async def _wait_for_previous(self, i):
+        """Give Claude the previous window as context when it is already being worked on.
+        A previous window that isn't running (e.g. after a seek) is not waited for."""
+        deadline = time.monotonic() + CONTEXT_WAIT_S
+        while i - 1 in self._running and i - 1 not in self.results and time.monotonic() < deadline:
+            try:
+                await asyncio.wait_for(self._results_changed.wait(), deadline - time.monotonic())
+            except TimeoutError:
+                return
 
     def _maybe_lock_language(self, transcript):
         if self.language or self.config.source_language != "auto":
