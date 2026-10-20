@@ -127,3 +127,21 @@ def test_rejected_key_stops_the_session(tmp_path):
 
     with pytest.raises(FatalError):
         run(go())
+
+
+def test_debug_events_cover_each_stage(tmp_path):
+    from live_translate.debuglog import DebugLog, panel_lines
+
+    log = DebugLog(keep=100)
+    session, _ = make_session(tmp_path, mode="full")
+    session.debug = log
+
+    async def go():
+        await session.prepare()
+        await session.run(until_complete=True)
+
+    run(go())
+    text = "\n".join(log.events)
+    for expected in ("seam near", "ffmpeg cut", "Scribe done", "Claude start", "Claude done", "wrote", "language locked"):
+        assert expected in text, expected
+    assert "done 1-3" in "\n".join(panel_lines(session, log))

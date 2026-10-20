@@ -12,6 +12,7 @@ import anthropic
 
 from . import langs, scheduler
 from .cache import Cache, file_key
+from .debuglog import clock, no_debug
 from .cues import build_cues, format_srt, join_cues, layout_for
 from .output import choose_path, write_atomic
 from .translate import PROMPT_VERSION, TranslationError
@@ -58,13 +59,17 @@ def _describe(exc):
 
 
 class Session:
-    def __init__(self, video, config, transcriber, translator, ffmpeg, cache_root, on_update=None, on_message=None):
+    def __init__(
+        self, video, config, transcriber, translator, ffmpeg, cache_root, on_update=None, on_message=None, debug=None
+    ):
         self.video = Path(video)
         self.config = config
         self.transcriber, self.translator, self.ffmpeg = transcriber, translator, ffmpeg
         self.cache_root = cache_root
         self.on_update = on_update or (lambda session: None)
         self.on_message = on_message or (lambda text: None)
+        self.debug = debug or no_debug
+        self.stages = {}  # running window index -> what it is waiting on, for the debug panel
 
         self.position = 0.0
         self.cost = 0.0
@@ -92,13 +97,20 @@ class Session:
         self.variant = f"{self.target}/{self.translator.model}-{self.translator.effort}-p{PROMPT_VERSION}"
         for i in range(len(self.starts)):
             self._load_cached(i)
+        self.debug(
+            f"{self.video.name}: {clock(self.duration)}, {len(self.starts)} windows, {len(self.results)} cached,"
+            f" {self.config.mode} {self.config.lookahead_s:g}s, {self.translator.model} {self.translator.effort}"
+        )
         if self.results:
             self._write_outputs()
 
     # --- controls -------------------------------------------------------------------------
 
     def set_position(self, t):
-        self.position = max(0.0, t)
+        t = max(0.0, t)
+        if abs(t - self.position) > 5:
+            self.debug(f"playhead {clock(self.position)} -> {clock(t)}")
+        self.position = t
         self._wake.set()
 
     def stop(self):
@@ -128,6 +140,8 @@ class Session:
             if until_complete and not order and not running and not waiting:
                 break
             for i in scheduler.to_start(order, running, WINDOW_SLOTS):
+                retry = f", attempt {self._attempts[i] + 1}" if i in self._attempts else ""
+                self.debug(f"start ({clock(self.starts[i])}{retry})", i)
                 running[i] = asyncio.create_task(self._process(i))
 
             wake = asyncio.create_task(self._wake.wait())
@@ -137,6 +151,7 @@ class Session:
             for i, task in list(running.items()):
                 if task.done():
                     del running[i]
+                    self.stages.pop(i, None)
                     self._finished(i, task)
 
         if running:
@@ -156,14 +171,18 @@ class Session:
             return
         if _is_fatal(exc):
             self._fatal = FatalError(_describe(exc))
+            self.debug(f"FATAL {type(exc).__name__}: {_describe(exc)}", i)
             self.stop()
             return
         self._attempts[i] = self._attempts.get(i, 0) + 1
         if self._attempts[i] >= MAX_ATTEMPTS:
             self.failed.add(i)
+            self.debug(f"FAILED after {MAX_ATTEMPTS} attempts: {type(exc).__name__}: {_describe(exc)}", i)
             self.on_message(f"Window {i + 1} failed: {_describe(exc)}")
         else:
-            self._retry_at[i] = time.monotonic() + 5 * self._attempts[i]
+            delay = 5 * self._attempts[i]
+            self._retry_at[i] = time.monotonic() + delay
+            self.debug(f"error, retry in {delay}s: {type(exc).__name__}: {_describe(exc)}", i)
 
     # --- one window -----------------------------------------------------------------------
 
@@ -180,9 +199,12 @@ class Session:
     async def _detect_seam(self, boundary):
         search = min(SEAM_SEARCH_S, self.config.window_s / 3)
         lo, hi = max(0.0, boundary - search), min(self.duration, boundary + search)
+        started = time.monotonic()
         silences = await self.ffmpeg.silences(self.video, lo, hi - lo)
         seam = pick_seam(boundary, silences, search)
         self.cache.set_seam(self.config.window_s, boundary, seam)
+        where = "in silence" if seam != boundary else "no silence nearby, cut at the boundary"
+        self.debug(f"seam near {clock(boundary)}: {clock(seam)} ({where}) {time.monotonic() - started:.1f}s")
         return seam
 
     async def _window(self, i):
@@ -218,38 +240,64 @@ class Session:
         return texts if texts is not None and len(texts) == len(cues) else None
 
     async def _process(self, i):
+        self.stages[i] = "seams"
         window = await self._window(i)
         transcript = self.cache.transcript(self.transcriber.model, window.start, window.end)
         if transcript is None:
             a, b = audio_span(window, self.duration)
+            self.stages[i] = "waiting for Scribe slot"
             async with self._scribe:
+                self.stages[i] = "ffmpeg"
+                started = time.monotonic()
                 flac = await self.ffmpeg.flac(self.video, a, b - a)
+                self.debug(f"ffmpeg cut {clock(a)}-{clock(b)} ({b - a:.1f}s, {len(flac) // 1024} KB) {time.monotonic() - started:.1f}s", i)
+                self.stages[i] = "Scribe"
+                started = time.monotonic()
                 result = await self.transcriber.transcribe(flac, a, b - a, self.language)
             self.cost += self.transcriber.cost(b - a)
+            self.debug(
+                f"Scribe done {time.monotonic() - started:.1f}s  {result.language_code} {result.language_probability:.2f}"
+                f"  {sum(1 for w in result.words if w['type'] == 'word')} words  ${self.transcriber.cost(b - a):.4f}", i
+            )
             transcript = {
                 "language_code": result.language_code,
                 "language_probability": result.language_probability,
                 "words": owned_words(window, result.words),
             }
             self.cache.set_transcript(self.transcriber.model, window.start, window.end, transcript)
+        else:
+            self.debug("transcript from cache", i)
         self._maybe_lock_language(transcript)
 
         language = transcript["language_code"]
         cues = build_cues(transcript["words"], layout_for(language))
         texts = self._cached_texts(language, cues, window)
-        if texts is None:
+        if texts is not None:
+            self.debug(f"{len(cues)} cues, translation " + ("not needed" if langs.iso1(language) == self.target else "from cache"), i)
+        else:
+            self.stages[i] = "waiting for previous window"
             await self._wait_for_previous(i)
+            context = self._context(i)
+            self.stages[i] = "waiting for Claude slot"
             try:
                 async with self._claude:
+                    self.stages[i] = "Claude"
+                    self.debug(f"Claude start  {len(cues)} cues, context {len(context)}", i)
+                    started = time.monotonic()
                     texts, usage = await self.translator.translate(
-                        cues, self._context(i), langs.name(language), langs.name(self.target)
+                        cues, context, langs.name(language), langs.name(self.target)
                     )
                 self.cost += usage.cost(self.translator.model)
+                self.debug(
+                    f"Claude done {time.monotonic() - started:.1f}s  {usage.input_tokens} in / {usage.output_tokens} out"
+                    f"  ${usage.cost(self.translator.model):.4f}", i
+                )
                 self.cache.set_translation(self.variant, window.start, window.end, texts)
             except TranslationError as e:
                 # A refusal won't change on retry: keep the original-language cues, skip the translation
                 self.cost += e.usage.cost(self.translator.model) if hasattr(e, "usage") else 0.0
                 self.failed.add(i)
+                self.debug(f"NOT TRANSLATED: {e}", i)
                 self.on_message(f"Window {i + 1} not translated: {e}")
                 texts = None
 
@@ -276,6 +324,7 @@ class Session:
             self.language = transcript["language_code"]
             self.cache.meta["language"] = self.language
             self.cache.save_meta()
+            self.debug(f"language locked to {self.language} ({transcript['language_probability']:.2f}, {words} words)")
 
     def _context(self, i):
         prev = self.results.get(i - 1)
@@ -293,6 +342,8 @@ class Session:
             self.outputs = {"translation": choose_path(self.video, self.target, self.cache)}
             if source_lang != self.target:
                 self.outputs["source"] = choose_path(self.video, source_lang, self.cache)
+            for kind, path in self.outputs.items():
+                self.debug(f"{kind} subtitles -> {path}")
 
         source = join_cues(r.cues for r in done)
         texts = [t for r in done for t in (r.texts or [None] * len(r.cues))]
@@ -304,4 +355,5 @@ class Session:
             text = format_srt(cues, layout.line_chars)
             write_atomic(self.outputs[kind], text)
             self.cache.record_output(self.outputs[kind], text)
+        self.debug(f"wrote {len(source)} cues ({len(translated)} translated) from {len(done)} windows")
         self.on_update(self)

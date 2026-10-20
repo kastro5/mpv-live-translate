@@ -171,3 +171,24 @@ def test_output_never_overwrites_foreign_subtitles(tmp_path):
 
     beside.write_text("someone else's")
     assert choose_path(video, "en", cache) == cache.dir / "movie.en.srt"
+
+
+# --- debug --------------------------------------------------------------------------------
+
+from live_translate.debuglog import DebugLog, ass_panel, clock, ranges
+
+
+def test_debug_log_keeps_recent_and_writes_all(tmp_path):
+    log = DebugLog(tmp_path / "logs" / "x.log", keep=2)
+    for n in range(3):
+        log(f"event {n}", window=n)
+    log.close()
+    assert [e.split("  ", 1)[1] for e in log.events] == ["#2 event 1", "#3 event 2"]
+    assert (tmp_path / "logs" / "x.log").read_text().count("event") == 3
+
+
+def test_debug_helpers():
+    assert ranges({0, 1, 2, 5}) == "1-3, 6" and ranges(set()) == "-"
+    assert clock(751.4) == "12:31.4" and clock(3751) == "1:02:31.0"
+    panel = ass_panel(["a {b} c\\d", "e"])
+    assert panel.endswith("a (b) c/d\\Ne") and panel.startswith("{\\an7")

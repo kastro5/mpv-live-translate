@@ -2,17 +2,21 @@
 
 import asyncio
 import os
+import time
 
 from python_mpv_jsonipc import MPVError
 
 from . import config as cfg
 from . import langs
 from .audio import Ffmpeg
+from .debuglog import DebugLog, ass_panel, panel_lines
 from .mpv_ipc import Mpv, MpvGone
 from .session import Session
 
 POLL_S = 1.0
 STOP_MESSAGE = "live-translate-stop"
+DEBUG_MESSAGE = "live-translate-debug"  # toggles the debug panel
+OVERLAY_ID = 47  # any id unique among this client's osd overlays
 
 
 def _same_file(a, b):
@@ -30,8 +34,9 @@ class Tracks:
     (sub-reload would force the track to primary and drop its title), then putting the
     user's sid / secondary-sid choice back."""
 
-    def __init__(self, mpv):
+    def __init__(self, mpv, debug):
         self.mpv = mpv
+        self.debug = debug
         self.ids = {}
         self._dirty = asyncio.Event()
         self._session = None
@@ -68,6 +73,7 @@ class Tracks:
                 await self.mpv.command("sub-remove", old)
             new = await self._find(path)
             self.ids[kind] = new
+            self.debug(f"track {kind}: {'replaced ' + str(old) + ' -> ' if old is not None else 'added '}{new}")
             if old is not None and new is not None:
                 if sid == old:
                     await self.mpv.set("sid", new)
@@ -94,8 +100,13 @@ async def _serve(mpv, args, config, providers):
         await mpv.osd(f"live-translate: {e}", 8)
         raise
 
-    tracks = Tracks(mpv)
-    session = None
+    log_path = None
+    if args.debug:
+        log_path = cfg.cache_dir() / "logs" / f"{args.file.stem}-{time.strftime('%Y%m%d-%H%M%S')}.log"
+    log = DebugLog(log_path)
+    tracks = Tracks(mpv, log)
+    panel = {"visible": bool(args.debug)}
+    panel_now = asyncio.Event()
 
     def updated(s):
         tracks.request_update(s)
@@ -107,8 +118,10 @@ async def _serve(mpv, args, config, providers):
         asyncio.get_running_loop().create_task(mpv.osd(f"live-translate: {text}", 5))
 
     session = Session(
-        args.file, config, transcriber, translator, ffmpeg, cfg.cache_dir(), on_update=updated, on_message=message
+        args.file, config, transcriber, translator, ffmpeg, cfg.cache_dir(),
+        on_update=updated, on_message=message, debug=log,
     )
+    log(f"connected to mpv at {args.ipc}")
     duration = await mpv.get("duration")
     await session.prepare(duration)
     session.set_position(await mpv.get("time-pos") or 0.0)
@@ -117,10 +130,16 @@ async def _serve(mpv, args, config, providers):
     poll_now = asyncio.Event()
 
     def on_client_message(data):
-        if data.get("args", [None])[0] == STOP_MESSAGE:
+        message = (data.get("args") or [None])[0]
+        if message == STOP_MESSAGE:
+            log("stop requested")
             session.stop()
+        elif message == DEBUG_MESSAGE:
+            panel["visible"] = not panel["visible"]
+            panel_now.set()
 
     def on_end_file(data):
+        log("file closed")
         session.stop()
 
     mpv.on_event("client-message", on_client_message)
@@ -137,6 +156,7 @@ async def _serve(mpv, args, config, providers):
             poll_now.clear()
             path = await mpv.get("path")
             if not path or not _same_file(path, args.file):
+                log("mpv moved to another file")
                 session.stop()
                 return
             pos = await mpv.get("time-pos")
@@ -145,19 +165,41 @@ async def _serve(mpv, args, config, providers):
 
     async def watch_disconnect():
         await mpv.closed.wait()
+        log("mpv disconnected")
         session.stop()
 
-    helpers = [asyncio.create_task(c) for c in (tracks.run(), follow(), watch_disconnect())]
+    async def draw_panel():
+        shown = False
+        while True:
+            try:
+                if panel["visible"]:
+                    await mpv.command("osd-overlay", OVERLAY_ID, "ass-events", ass_panel(panel_lines(session, log)))
+                    shown = True
+                elif shown:
+                    await mpv.command("osd-overlay", OVERLAY_ID, "none", "")
+                    shown = False
+            except MPVError as e:
+                log(f"debug panel: mpv refused osd-overlay: {e}")
+            try:
+                await asyncio.wait_for(panel_now.wait(), POLL_S)
+            except TimeoutError:
+                pass
+            panel_now.clear()
+
+    helpers = [asyncio.create_task(c) for c in (tracks.run(), follow(), watch_disconnect(), draw_panel())]
     try:
         await session.run()
     finally:
         for task in helpers:
             task.cancel()
         await asyncio.gather(*helpers, return_exceptions=True)
+        log(f"stopped, session cost ${session.cost:.4f}")
         if not mpv.closed.is_set():
             try:
                 if session.outputs:
                     await tracks._sync(session)  # windows that landed during the stop grace period
+                await mpv.command("osd-overlay", OVERLAY_ID, "none", "")
             except (MpvGone, MPVError):
                 pass
             await mpv.osd(f"live-translate: stopped · ${session.cost:.2f}", 3)
+        log.close()

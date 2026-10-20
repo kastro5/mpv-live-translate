@@ -6,15 +6,18 @@
 --   executable=C:\Users\me\.local\bin\live-translate.exe
 --   ffmpeg=C:\ffmpeg\bin\ffmpeg.exe
 --   key=ctrl+t
+--   debug=no          (yes: show the debug panel from the start and write a log file)
+--   debug_key=ctrl+T  (Ctrl+Shift+T shows/hides the debug panel while running)
 
 local mp = require "mp"
 local utils = require "mp.utils"
 local options = require "mp.options"
 
-local opts = { executable = "live-translate", ffmpeg = "", key = "ctrl+t" }
+local opts = { executable = "live-translate", ffmpeg = "", key = "ctrl+t", debug = false, debug_key = "ctrl+T" }
 options.read_options(opts, "live_translate")
 
 local STOP_MESSAGE = "live-translate-stop"
+local DEBUG_MESSAGE = "live-translate-debug"
 local STOP_TIMEOUT_S = 3
 local is_windows = package.config:sub(1, 1) == "\\"
 
@@ -57,6 +60,9 @@ local function start()
     if opts.ffmpeg ~= "" then
         table.insert(args, "--ffmpeg")
         table.insert(args, opts.ffmpeg)
+    end
+    if opts.debug then
+        table.insert(args, "--debug")
     end
 
     stopping = false
@@ -103,6 +109,14 @@ mp.add_key_binding(opts.key, "toggle", function()
         stop()
     elseif not job then
         start()
+    end
+end)
+
+mp.add_key_binding(opts.debug_key, "debug", function()
+    if job and not stopping then
+        mp.commandv("script-message", DEBUG_MESSAGE)
+    else
+        mp.osd_message("live-translate: not running (press " .. opts.key .. " to start)")
     end
 end)
 

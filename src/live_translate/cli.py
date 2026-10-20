@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import config as cfg
 from .audio import AudioError, Ffmpeg
+from .debuglog import DebugLog
 from .session import FatalError, Session
 
 
@@ -40,9 +41,13 @@ async def generate(args):
         done = len(session.results)
         print(f"  {done}/{len(session.starts)} windows  |  ${session.cost:.4f}  |  {time.perf_counter() - started:.0f}s")
 
+    log = None
+    if args.debug:
+        log = DebugLog(cfg.cache_dir() / "logs" / f"{args.file.stem}-{time.strftime('%Y%m%d-%H%M%S')}.log", echo=print)
+        print(f"Debug log: {log.path}")
     session = Session(
         args.file, config, transcriber, translator, Ffmpeg(args.ffmpeg), cfg.cache_dir(),
-        on_update=progress, on_message=lambda text: print(f"  {text}"),
+        on_update=progress, on_message=lambda text: print(f"  {text}"), debug=log,
     )
     await session.prepare()
     print(f"{args.file}: {session.duration / 60:.1f} min, {len(session.starts)} windows, {len(session.results)} cached")
@@ -73,6 +78,7 @@ def main(argv=None):
         p.add_argument("--effort", choices=cfg.EFFORTS)
         p.add_argument("--ffmpeg", help="path to ffmpeg if it isn't on PATH")
         p.add_argument("--fake", action="store_true", help="fake providers: no API calls, for testing")
+        p.add_argument("--debug", action="store_true", help="show what each step is doing and write a log file")
 
     p = sub.add_parser("generate", help="write subtitles for a whole file")
     p.add_argument("file", type=Path)

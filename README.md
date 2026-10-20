@@ -70,6 +70,29 @@ Open a video in mpv and press <kbd>Ctrl</kbd>+<kbd>T</kbd>. Press it again to st
 - To change the key, set `key=...` in `script-opts/live_translate.conf`, or bind
   `script-binding live_translate/toggle` in `input.conf`.
 
+### Debug panel
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> while it runs to show or hide a panel with
+what each step is doing: playhead, how far ahead subtitles are ready, cost so far, which windows
+are done or running (and on what), and the latest events (silence cuts, ffmpeg, Scribe and Claude
+timings, tokens, retries and errors, track updates).
+
+```
+live-translate DEBUG   pos 12:31.0   ready to 14:02.3   $0.083
+windows 120   done 10-12   failed -
+running 13 Claude, 14 Scribe
+22:31:06  #13 Scribe done 3.1s  jpn 0.98  212 words  $0.0039
+22:31:06  #13 Claude start  28 cues, context 20
+22:31:10  #12 Claude done 4.4s  2146 in / 546 out  $0.0098
+```
+
+With `debug=yes` in `script-opts/live_translate.conf`, the panel is shown from the start and every
+event is also written to a log file (its path is on the panel's last line) under the cache folder's
+`logs/`. `live-translate generate --debug` prints the same events in the terminal. If something goes
+wrong, that log file is the thing to attach to an issue.
+
+### Ahead of time
+
 Whole files can also be done ahead of time without mpv:
 
 ```sh
@@ -122,7 +145,8 @@ uv run live-translate generate some-video.mkv --fake   # whole pipeline, no API 
 
 ### Manual test checklist (Windows)
 
-1. `uv tool install`, `install-mpv-script`, `config` with keys.
+1. `uv tool install`, `install-mpv-script`, `config` with keys. Add `debug=yes` to
+   `script-opts/live_translate.conf` for the first runs.
 2. Open a Japanese video in mpv, press Ctrl+T: "started", then subtitles within about 20 seconds.
 3. Seek forward 10 minutes: subtitles catch up within a few seconds.
 4. Pause for 3 minutes: the cost on screen stops rising.
