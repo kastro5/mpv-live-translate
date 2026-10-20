@@ -39,7 +39,7 @@ def update_opts(path, values):
     path.write_text("\n".join(kept + [f"{k}={v}" for k, v in values.items()]) + "\n", encoding="utf-8")
 
 
-def install(mpv_dir=None):
+def install(mpv_dir=None, hint=True):
     mpv_dir = mpv_dir or mpv_config_dir()
     scripts, opts = mpv_dir / "scripts", mpv_dir / "script-opts"
     scripts.mkdir(parents=True, exist_ok=True)
@@ -56,4 +56,5 @@ def install(mpv_dir=None):
     print(f"Settings  {opts / OPTS}")
     if not ffmpeg:
         print("Warning: ffmpeg not found on PATH. Install it, then run this again (or set ffmpeg= in the file above).")
-    print("Next: run `live-translate config` to add your API keys, then press Ctrl+T in mpv.")
+    if hint:
+        print("Next: run `live-translate setup` if you haven't yet, then press Ctrl+T in mpv.")

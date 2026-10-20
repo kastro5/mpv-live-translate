@@ -103,12 +103,13 @@ async def _serve(mpv, args, config, providers):
         await mpv.osd(f"live-translate: {e}", 8)
         raise
 
+    debug = args.debug or config.debug
     log_path = None
-    if args.debug:
+    if debug:
         log_path = cfg.cache_dir() / "logs" / f"{args.file.stem}-{time.strftime('%Y%m%d-%H%M%S')}.log"
     log = DebugLog(log_path)
     tracks = Tracks(mpv, log)
-    panel = {"visible": bool(args.debug)}
+    panel = {"visible": debug}
     panel_now = asyncio.Event()
 
     def updated(s):

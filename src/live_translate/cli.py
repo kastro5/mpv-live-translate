@@ -3,6 +3,9 @@
 import argparse
 import asyncio
 import dataclasses
+import os
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -42,7 +45,7 @@ async def generate(args):
         print(f"  {done}/{len(session.starts)} windows  |  ${session.cost:.4f}  |  {time.perf_counter() - started:.0f}s")
 
     log = None
-    if args.debug:
+    if args.debug or config.debug:
         log = DebugLog(cfg.cache_dir() / "logs" / f"{args.file.stem}-{time.strftime('%Y%m%d-%H%M%S')}.log", echo=print)
         print(f"Debug log: {log.path}")
     session = Session(
@@ -57,15 +60,28 @@ async def generate(args):
     print(f"Total ${session.cost:.4f} in {time.perf_counter() - started:.0f}s")
 
 
+def open_in_editor(path):
+    if os.name == "nt":
+        subprocess.Popen(["notepad.exe", str(path)])  # .toml often has no default app on Windows
+    elif sys.platform == "darwin":
+        subprocess.run(["open", "-t", str(path)])
+    else:
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or shutil.which("xdg-open")
+        if not editor:
+            raise cfg.ConfigError(f"No editor found; set $EDITOR or open {path} yourself")
+        subprocess.run([*editor.split(), str(path)])
+
+
 def show_config(args):
     path = cfg.config_path()
     if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(cfg.TEMPLATE, encoding="utf-8")
-        print(f"Created {path}")
+        cfg.save(cfg.Config(), path)
+        print(f"Created {path} (run `live-translate setup` to fill it in interactively)")
     else:
         print(path)
     print(f"Cache: {cfg.cache_dir()}")
+    if args.edit:
+        open_in_editor(path)
 
 
 def main(argv=None):
@@ -89,7 +105,10 @@ def main(argv=None):
     p.add_argument("--file", required=True, type=Path)
     common(p)
 
-    sub.add_parser("config", help="show (and create) the config file")
+    sub.add_parser("setup", help="guided first-time setup: API keys, language, model, mpv script")
+
+    p = sub.add_parser("config", help="show (and create) the config file")
+    p.add_argument("--edit", action="store_true", help="open it in a text editor")
 
     p = sub.add_parser("install-mpv-script", help="copy live-translate.lua into mpv's scripts folder")
     p.add_argument("--mpv-dir", type=Path, help="mpv config dir (default: the usual one for this OS)")
@@ -102,6 +121,10 @@ def main(argv=None):
             from .serve import serve
 
             asyncio.run(serve(args, load_config(args), providers))
+        elif args.command == "setup":
+            from .setup import setup
+
+            setup()
         elif args.command == "config":
             show_config(args)
         elif args.command == "install-mpv-script":

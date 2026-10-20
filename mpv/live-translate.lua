@@ -6,7 +6,7 @@
 --   executable=C:\Users\me\.local\bin\live-translate.exe
 --   ffmpeg=C:\ffmpeg\bin\ffmpeg.exe
 --   key=ctrl+t
---   debug=no          (yes: show the debug panel from the start and write a log file)
+--   debug=no          (yes: same as debug = true in live-translate's config.toml)
 --   debug_key=ctrl+T  (Ctrl+Shift+T shows/hides the debug panel while running)
 
 local mp = require "mp"

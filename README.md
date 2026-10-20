@@ -43,23 +43,48 @@ The running cost for the session is shown on screen. Rewatching cached parts cos
 
 ## Install
 
-You need [mpv](https://mpv.io/installation/), [ffmpeg](https://ffmpeg.org/download.html) on your
-PATH, [uv](https://docs.astral.sh/uv/getting-started/installation/), and API keys for
+You need [mpv](https://mpv.io/installation/), [ffmpeg](https://ffmpeg.org/download.html),
+[uv](https://docs.astral.sh/uv/getting-started/installation/), and API keys for
 [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) and
-[Anthropic](https://platform.claude.com/settings/keys).
+[Anthropic](https://platform.claude.com/settings/keys) (an ElevenLabs key limited to speech-to-text
+is enough).
 
 ```sh
 uv tool install git+https://github.com/kastro5/mpv-live-translate
-live-translate install-mpv-script   # copies the script into mpv and records where things are
-live-translate config               # creates config.toml and prints its path: put your keys there
+live-translate setup
 ```
 
-The keys can instead come from the `ELEVENLABS_API_KEY` and `ANTHROPIC_API_KEY` environment
-variables, which win over the file. On Windows the config file is
-`%LOCALAPPDATA%\live-translate\config.toml`; on Linux `~/.config/live-translate/config.toml`; on macOS
-`~/Library/Application Support/live-translate/config.toml`.
+`setup` asks for your keys (and checks them), the language to translate into and the model, then
+installs the mpv script. Run it again any time to change those.
 
-Updating: `uv tool upgrade mpv-live-translate`, then run `live-translate install-mpv-script` again.
+### Windows quick start
+
+In PowerShell:
+
+```powershell
+winget install Git.Git
+winget install Gyan.FFmpeg
+winget install astral-sh.uv
+winget install shinchiro.mpv
+# close and reopen PowerShell so the new commands are on PATH
+uv tool install git+https://github.com/kastro5/mpv-live-translate
+live-translate setup
+```
+
+- Use plain mpv (the `shinchiro.mpv` build above). mpv.net is a different player with its own
+  config folder and key bindings, and isn't tested.
+- If your mpv folder has a `portable_config` folder next to `mpv.exe`, mpv reads its settings from
+  there: answer *n* when `setup` offers to install the script and run
+  `live-translate install-mpv-script --mpv-dir "C:\path\to\mpv\portable_config"` instead.
+- To open videos in mpv by double-clicking, right-click a video → *Open with* → *Choose another
+  app* → mpv.
+
+### Updating
+
+```sh
+uv tool upgrade mpv-live-translate
+live-translate install-mpv-script
+```
 
 ## Use
 
@@ -86,9 +111,9 @@ running 13 Claude, 14 Scribe
 22:31:10  #12 Claude done 4.4s  2146 in / 546 out  $0.0098
 ```
 
-With `debug=yes` in `script-opts/live_translate.conf`, the panel is shown from the start and every
-event is also written to a log file (its path is on the panel's last line) under the cache folder's
-`logs/`. `live-translate generate --debug` prints the same events in the terminal. If something goes
+With `debug = true` in the settings (or answering *y* in `setup`), the panel is shown from the
+start and every event is also written to a log file (its path is on the panel's last line) under the
+cache folder's `logs/`. `live-translate generate --debug` prints the same events in the terminal. If something goes
 wrong, that log file is the thing to attach to an issue.
 
 ### Ahead of time
@@ -103,7 +128,8 @@ That fills the same cache, so playing the file afterwards is instant and free.
 
 ## Settings
 
-`config.toml`:
+`live-translate setup` covers the common ones. For the rest, `live-translate config --edit` opens
+`config.toml` in a text editor (Notepad on Windows):
 
 ```toml
 [transcribe]
@@ -111,14 +137,35 @@ source_language = "auto"   # or e.g. "ja" to skip detection
 
 [translate]
 target = "en"              # any language Claude writes
-model = "claude-sonnet-5-5"
+model = "claude-sonnet-5-5"   # claude-sonnet-5-5 | claude-opus-5-5 | claude-haiku-5-5
 effort = "medium"          # low | medium | high | xhigh | max
 
 [live]
 mode = "lookahead"         # lookahead: stay ahead of the playhead; full: then do the rest of the file
 lookahead_s = 120
 window_s = 60
+debug = false              # true: show the debug panel from the start and write log files
 ```
+
+The file lives in `%LOCALAPPDATA%\live-translate\config.toml` on Windows,
+`~/.config/live-translate/config.toml` on Linux and
+`~/Library/Application Support/live-translate/config.toml` on macOS. The API keys can instead come
+from the `ELEVENLABS_API_KEY` and `ANTHROPIC_API_KEY` environment variables, which win over the
+file. Changes apply the next time you press Ctrl+T.
+
+The mpv side has its own small file, `script-opts/live_translate.conf` in mpv's config folder, for
+the keys (`key=ctrl+t`, `debug_key=ctrl+T`) and the paths `install-mpv-script` writes.
+
+## Troubleshooting
+
+- **Nothing happens on Ctrl+T:** check that `live-translate.lua` is in mpv's `scripts` folder
+  (`%APPDATA%\mpv\scripts` on Windows, or `portable_config\scripts`). Another script or your
+  `input.conf` may also use Ctrl+T; change `key=` in `live_translate.conf`.
+- **"could not run 'live-translate'":** run `live-translate install-mpv-script` again so the script
+  knows where the command is.
+- **"Missing … API key" or a quota/credits message:** run `live-translate setup`, or top up the
+  account it names.
+- **Anything else:** turn on debug, reproduce it, and attach the log file to an issue.
 
 ## Privacy
 
@@ -145,9 +192,8 @@ uv run live-translate generate some-video.mkv --fake   # whole pipeline, no API 
 
 ### Manual test checklist (Windows)
 
-1. `uv tool install`, `install-mpv-script`, `config` with keys. Add `debug=yes` to
-   `script-opts/live_translate.conf` for the first runs.
-2. Open a Japanese video in mpv, press Ctrl+T: "started", then subtitles within about 20 seconds.
+1. `uv tool install`, then `live-translate setup` with debug on.
+2. Open a Japanese video in mpv, press Ctrl+T: "started", then subtitles within about 10 seconds.
 3. Seek forward 10 minutes: subtitles catch up within a few seconds.
 4. Pause for 3 minutes: the cost on screen stops rising.
 5. Press Ctrl+T: "stopped · $x.xx".
