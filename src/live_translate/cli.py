@@ -1,4 +1,5 @@
-"""live-translate command line: generate, serve (started by the mpv script), config, install-mpv-script."""
+"""live-translate command line: generate, serve (started by the mpv script), setup, config,
+install-mpv-script, shortcut."""
 
 import argparse
 import asyncio
@@ -114,6 +115,9 @@ def main(argv=None):
     p = sub.add_parser("install-mpv-script", help="copy live-translate.lua into mpv's scripts folder")
     p.add_argument("--mpv-dir", type=Path, help="mpv config dir (default: the usual one for this OS)")
 
+    p = sub.add_parser("shortcut", help="desktop shortcut that plays the copied link with live-translate (Windows)")
+    p.add_argument("--mpv", help="path to mpv.exe if it isn't on PATH")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
@@ -132,6 +136,10 @@ def main(argv=None):
             from .install import install
 
             install(args.mpv_dir)
+        elif args.command == "shortcut":
+            from .install import shortcut
+
+            shortcut(args.mpv)
     except (cfg.ConfigError, AudioError, LinkError, FatalError) as e:
         sys.exit(f"live-translate: {e}")
     except KeyboardInterrupt:

@@ -3,12 +3,13 @@ target language and model, writes config.toml and installs the mpv script."""
 
 import dataclasses
 import getpass
+import os
 import shutil
 import sys
 
 from . import config as cfg
 from . import langs
-from .install import install, mpv_config_dir
+from .install import install, mpv_config_dir, shortcut
 
 SCRIBE_PER_HOUR = 0.23
 MODELS = [  # (model, label, translation $/hour, measured on Japanese with Sonnet and scaled by price)
@@ -81,7 +82,7 @@ def ask_yes(prompt, default, ask):
 
 
 def run_setup(ask=input, ask_secret=getpass.getpass, say=print, checks=(check_elevenlabs, check_anthropic),
-              path=None, mpv_dir=None, do_install=install):
+              path=None, mpv_dir=None, do_install=install, make_shortcut=None):
     path = path or cfg.config_path()
     try:
         current = cfg.load(path, env={})
@@ -121,6 +122,11 @@ def run_setup(ask=input, ask_secret=getpass.getpass, say=print, checks=(check_el
     say("`live-translate install-mpv-script --mpv-dir <path to portable_config>` instead.")
     if ask_yes(f"Install or update the mpv script in {mpv_dir}?", True, ask):
         do_install(mpv_dir, hint=False)
+    if make_shortcut and ask_yes("Create a desktop shortcut that plays a copied link with live-translate?", True, ask):
+        try:
+            make_shortcut()
+        except cfg.ConfigError as e:
+            say(f"  {e}")
     if not shutil.which("ffmpeg"):
         say("\nWarning: ffmpeg isn't on PATH. Install it (Windows: winget install Gyan.FFmpeg), then run setup again.")
     say("\nDone. Open a video in mpv and press Ctrl+T.")
@@ -129,4 +135,4 @@ def run_setup(ask=input, ask_secret=getpass.getpass, say=print, checks=(check_el
 def setup():
     if not sys.stdin.isatty():
         raise cfg.ConfigError("setup is interactive; run it in a terminal")
-    run_setup()
+    run_setup(make_shortcut=shortcut if os.name == "nt" else None)

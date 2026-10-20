@@ -8,12 +8,16 @@
 --   key=ctrl+t
 --   debug=no          (yes: same as debug = true in live-translate's config.toml)
 --   debug_key=ctrl+T  (Ctrl+Shift+T shows/hides the debug panel while running)
+--   clipboard=no      (yes: on startup, open the link or path on the clipboard and start
+--                      translating; the `live-translate shortcut` desktop shortcut sets this)
 
 local mp = require "mp"
 local utils = require "mp.utils"
 local options = require "mp.options"
 
-local opts = { executable = "live-translate", ffmpeg = "", key = "ctrl+t", debug = false, debug_key = "ctrl+T" }
+local opts = {
+    executable = "live-translate", ffmpeg = "", key = "ctrl+t", debug = false, debug_key = "ctrl+T", clipboard = false,
+}
 options.read_options(opts, "live_translate")
 
 local STOP_MESSAGE = "live-translate-stop"
@@ -125,3 +129,30 @@ end)
 
 mp.register_event("end-file", stop)
 mp.register_event("shutdown", stop)
+
+local function open_clipboard(tries)
+    local text = mp.get_property("clipboard/text") -- needs mpv 0.40+
+    if text == nil and tries > 0 then
+        mp.add_timeout(0.2, function() open_clipboard(tries - 1) end) -- may not be ready during startup
+        return
+    end
+    text = (text or ""):match("^%s*(.-)%s*$")
+    local is_link = text:lower():find("^https?://")
+    if text == "" or text:find("[\r\n]") or not (is_link or utils.file_info(text)) then
+        mp.osd_message("live-translate: copy a video link first (PikPak: Copy link), then press Ctrl+V and "
+            .. opts.key, 10)
+        return
+    end
+    local function once()
+        mp.unregister_event(once)
+        if not job then
+            start()
+        end
+    end
+    mp.register_event("file-loaded", once)
+    mp.commandv("loadfile", text)
+end
+
+if opts.clipboard and mp.get_property_number("playlist-count", 0) == 0 then
+    open_clipboard(10)
+end

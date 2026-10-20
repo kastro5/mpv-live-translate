@@ -1,6 +1,6 @@
 [project]
 name = "mpv-live-translate"
-version = "0.1.0"
+version = "0.2.0"
 description = "Live translated subtitles in mpv, generated just ahead of the playhead with ElevenLabs Scribe and Claude"
 readme = "README.md"
 license = "MIT"

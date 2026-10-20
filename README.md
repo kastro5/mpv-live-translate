@@ -135,6 +135,10 @@ Direct `http(s)` links to a video file work too, for example a cloud drive's dow
    to play the copied link.
 3. Press <kbd>Ctrl</kbd>+<kbd>T</kbd> as usual.
 
+On Windows, `live-translate shortcut` (also offered by `setup`) puts a **Translate copied link**
+shortcut on the desktop that does steps 2 and 3 in one go: copy a link, open the shortcut. It needs
+mpv 0.40 or newer. It also works with a copied file path.
+
 Things that differ from local files:
 
 - The subtitle files go in the cache folder, named after the video (the debug log
