@@ -45,6 +45,9 @@ class Tracks:
         self._session = session
         self._dirty.set()
 
+    def pending(self):
+        return self._dirty.is_set() and self._session is not None
+
     async def run(self):
         while True:
             await self._dirty.wait()
@@ -196,7 +199,7 @@ async def _serve(mpv, args, config, providers):
         log(f"stopped, session cost ${session.cost:.4f}")
         if not mpv.closed.is_set():
             try:
-                if session.outputs:
+                if tracks.pending():
                     await tracks._sync(session)  # windows that landed during the stop grace period
                 await mpv.command("osd-overlay", OVERLAY_ID, "none", "")
             except (MpvGone, MPVError):
