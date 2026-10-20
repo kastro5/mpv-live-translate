@@ -3,8 +3,8 @@
 Translated subtitles for any video in [mpv](https://mpv.io), generated **while you watch**. Press
 <kbd>Ctrl</kbd>+<kbd>T</kbd> and subtitles appear a few seconds later, kept a couple of minutes ahead
 of the playhead. Speech recognition is [ElevenLabs Scribe v2](https://elevenlabs.io/speech-to-text)
-and translation is [Claude](https://www.anthropic.com/claude), so the quality is far beyond local
-Whisper for hard audio like streams, casual speech and Japanese.
+and translation is [Claude](https://www.anthropic.com/claude). In the author's testing, Scribe was much
+more accurate than local Whisper on hard audio like streams and casual Japanese speech.
 
 - Only the part you watch is processed. Pausing stops spending once the buffer is full.
 - Seeking jumps the work to the new spot.
@@ -29,8 +29,9 @@ context, and the subtitle files are rewritten as windows finish.
 
 ## Cost
 
-You pay ElevenLabs and Anthropic directly with your own API keys. Measured with the defaults
-(Claude Sonnet 5.5, medium effort) on Japanese speech:
+You pay ElevenLabs and Anthropic directly with your own API keys. Rough figures with the defaults
+(Claude Sonnet 5.5, medium effort) on Japanese speech; the translation part was measured, the
+transcription part is ElevenLabs' list price:
 
 | | per hour watched |
 |---|---|
