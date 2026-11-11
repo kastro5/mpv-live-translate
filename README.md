@@ -25,7 +25,8 @@ mpv ──Ctrl+T──► live-translate.lua ──starts──► live-translat
 
 The video is split into ~60-second windows whose boundaries are moved into nearby silence, so no
 sentence is cut in half. Each window is transcribed and translated with the previous window as
-context, and the subtitle files are rewritten as windows finish.
+context, and the subtitle files are rewritten as windows finish. See
+[docs/how-it-works.md](docs/how-it-works.md) for the details.
 
 ## Cost
 
