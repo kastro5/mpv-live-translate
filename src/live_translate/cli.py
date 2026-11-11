@@ -12,8 +12,9 @@ import time
 from pathlib import Path
 
 from . import config as cfg
+from . import langs
 from .audio import AudioError, Ffmpeg
-from .debuglog import DebugLog
+from .debuglog import DebugLog, clock
 from .session import FatalError, Session
 from .stream import LinkError, log_stem
 
@@ -37,12 +38,33 @@ def load_config(args):
     return dataclasses.replace(config, **overrides)
 
 
+def window_lines(result, target):
+    """A finished window for `generate --show`: each cue's original, then its translation."""
+    lines = [f"--- window {result.window.index + 1}  {clock(result.window.start)}-{clock(result.window.end)}"
+             f"  ({langs.iso1(result.language)} -> {target})"]
+    if not result.cues:
+        lines.append("  (no speech)")
+    same = langs.iso1(result.language) == target
+    for n, (start, _, text) in enumerate(result.cues):
+        lines.append(f"  {clock(start):>9}  {text}")
+        if result.texts is None:
+            lines.append(f"  {'':>9}  (not translated)")
+        elif not same:
+            lines.append(f"  {'':>9}  {result.texts[n]}")
+    return lines
+
+
 async def generate(args):
     config = dataclasses.replace(load_config(args), mode="full")
     transcriber, translator = providers(config, args.fake)
     started = time.perf_counter()
+    shown = None  # window indices already printed by --show; None until cached windows are loaded
 
     def progress(session):
+        if args.show and shown is not None:
+            for i in sorted(set(session.results) - shown):
+                shown.add(i)
+                print("\n".join(window_lines(session.results[i], session.target)))
         done = len(session.results)
         print(f"  {done}/{len(session.starts)} windows  |  ${session.cost:.4f}  |  {time.perf_counter() - started:.0f}s")
 
@@ -55,6 +77,7 @@ async def generate(args):
         on_update=progress, on_message=lambda text: print(f"  {text}"), debug=log,
     )
     await session.prepare()
+    shown = set(session.results)  # --show prints only windows done in this run, not the cache
     print(f"{session.name}: {session.duration / 60:.1f} min, {len(session.starts)} windows, {len(session.results)} cached")
     await session.run(until_complete=True)
     for kind, path in session.outputs.items():
@@ -100,6 +123,7 @@ def main(argv=None):
 
     p = sub.add_parser("generate", help="write subtitles for a whole file")
     p.add_argument("file", help="video file or direct http(s) link")
+    p.add_argument("--show", action="store_true", help="print each window's original and translated lines as it finishes")
     common(p)
 
     p = sub.add_parser("serve", help="follow an mpv player (started by live-translate.lua)")

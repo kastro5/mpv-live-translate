@@ -192,3 +192,20 @@ def test_debug_helpers():
     assert clock(751.4) == "12:31.4" and clock(3751) == "1:02:31.0"
     panel = ass_panel(["a {b} c\\d", "e"])
     assert panel.endswith("a (b) c/d\\Ne") and panel.startswith("{\\an7")
+
+
+def test_show_lines_for_translated_refused_and_same_language():
+    from live_translate.cli import window_lines
+    from live_translate.session import WindowResult
+    from live_translate.windows import Window
+
+    cues = [(61.0, 63.0, "こんにちは"), (64.0, 66.0, "またね")]
+    lines = window_lines(WindowResult(Window(1, 60.0, 120.0), "jpn", cues, ["Hello", "See you"]), "en")
+    assert lines[0] == "--- window 2  1:00.0-2:00.0  (ja -> en)"
+    assert [line.strip() for line in lines[1:]] == ["1:01.0  こんにちは", "Hello", "1:04.0  またね", "See you"]
+
+    refused = window_lines(WindowResult(Window(0, 0.0, 60.0), "jpn", cues[:1], None), "en")
+    assert refused[-1].strip() == "(not translated)"
+
+    same = window_lines(WindowResult(Window(0, 0.0, 60.0), "eng", [(1.0, 2.0, "Hi")], ["Hi"]), "en")
+    assert len(same) == 2

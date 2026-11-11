@@ -137,6 +137,15 @@ transcript generate movie.mkv
 
 That fills the same cache, so playing the file afterwards is instant and free.
 
+Add `--show` to print each window's original and translated lines in the terminal as it finishes
+(windows run three at a time, so they can arrive slightly out of order):
+
+```
+--- window 2  1:00.4-2:01.2  (ja -> en)
+     1:00.9  ちょっと待って、それ本当？
+             Wait, is that true?
+```
+
 ### Links (PikPak and other direct links)
 
 Direct `http(s)` links to a video file work too, for example a cloud drive's download link:
