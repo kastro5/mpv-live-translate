@@ -79,3 +79,44 @@ def test_shortcut_runs_powershell_with_paths_in_env(tmp_path, monkeypatch, capsy
     assert args[0] == "powershell" and "CreateShortcut" in args[-1]
     assert env["LT_MPV"] == str(mpv.resolve()) and "live_translate-clipboard=yes" in env["LT_ARGS"]
     assert "Created" in capsys.readouterr().out
+
+
+def test_update_upgrades_then_reinstalls_from_new_version(tmp_path, monkeypatch):
+    from live_translate import update
+
+    monkeypatch.setattr(update.shutil, "which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr(update, "executable", lambda: "/bin/transcript")
+    ran = []
+    update.update(tmp_path / "mpv", run=lambda cmd: ran.append(cmd) or types.SimpleNamespace(returncode=0), windows=False)
+    assert ran == [
+        ["/bin/uv", "tool", "upgrade", "mpv-live-translate"],
+        ["/bin/transcript", "install-mpv-script", "--mpv-dir", str(tmp_path / "mpv")],
+    ]
+
+
+def test_update_stops_if_upgrade_fails(monkeypatch):
+    from live_translate import update
+
+    monkeypatch.setattr(update.shutil, "which", lambda name: f"/bin/{name}")
+    ran = []
+    with pytest.raises(cfg.ConfigError, match="uv tool upgrade"):
+        update.update(run=lambda cmd: ran.append(cmd) or types.SimpleNamespace(returncode=2), windows=False)
+    assert len(ran) == 1
+
+
+def test_update_on_windows_hands_off_to_a_new_window(monkeypatch):
+    import base64
+
+    from live_translate import update
+
+    monkeypatch.setattr(update.shutil, "which", lambda name: f"C:\\bin\\{name}.exe")
+    monkeypatch.setattr(update, "executable", lambda: "C:\\bin\\transcript.exe")
+    launched = []
+    update.update(run=lambda cmd: pytest.fail("must not upgrade in-process"),
+                  popen=lambda cmd, **kw: launched.append((cmd, kw)), windows=True)
+    (cmd, kw), = launched
+    script = base64.b64decode(cmd[cmd.index("-EncodedCommand") + 1]).decode("utf-16-le")
+    assert "tool upgrade $env:LT_PACKAGE" in script and "WaitForExit" in script
+    env = kw["env"]
+    assert (env["LT_UV"], env["LT_EXE"], env["LT_PACKAGE"]) == ("C:\\bin\\uv.exe", "C:\\bin\\transcript.exe", "mpv-live-translate")
+    assert env["LT_SELF"] == str(update.os.getpid())

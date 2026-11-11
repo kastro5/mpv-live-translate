@@ -1,6 +1,6 @@
 [project]
 name = "mpv-live-translate"
-version = "0.2.0"
+version = "0.3.0"
 description = "Live translated subtitles in mpv, generated just ahead of the playhead with ElevenLabs Scribe and Claude"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-live-translate = "live_translate.cli:main"
+transcript = "live_translate.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

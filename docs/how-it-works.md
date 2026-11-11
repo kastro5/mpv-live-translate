@@ -6,7 +6,7 @@ translated subtitle appearing on screen. For installing and using the tool, see 
 ## Overview
 
 ```
-┌──────────── mpv ────────────┐        ┌──────────────── live-translate serve ────────────────┐
+┌──────────── mpv ────────────┐        ┌──────────────── transcript serve ────────────────────┐
 │ live-translate.lua          │ spawn  │ serve.py   follows the playhead, updates tracks, OSD │
 │   Ctrl+T ── start/stop ─────┼───────►│   │                                                  │
 │   Ctrl+Shift+T ─ debug ─────┼─ IPC ─►│ session.py  one Session per video                    │
@@ -25,9 +25,9 @@ There are two pieces:
 
 - **`mpv/live-translate.lua`** is a thin mpv script. It starts and stops the Python process and
   forwards key presses. It does no processing itself.
-- **The `live-translate` Python package** does everything else. `live-translate serve` is the
-  process the Lua script starts; `live-translate generate` runs the same pipeline over a whole file
-  without mpv.
+- **The Python package** (`live_translate`, installed as the `transcript` command) does everything
+  else. `transcript serve` is the process the Lua script starts; `transcript generate` runs the same
+  pipeline over a whole file without mpv.
 
 Both commands are built on one class, `Session` (`src/live_translate/session.py`), which runs the
 pipeline for one video.
@@ -53,6 +53,7 @@ pipeline for one video.
 | `config.py` | `config.toml` loading/validation, env var overrides, cache dir |
 | `langs.py` | ISO 639-1 / 639-3 codes and language names |
 | `setup.py`, `install.py` | Guided setup, installing the Lua script, the Windows desktop shortcut |
+| `update.py` | `transcript update`: `uv tool upgrade`, then reinstalling the Lua script from the new version |
 
 ## Lifecycle of a live session
 
@@ -64,7 +65,7 @@ When <kbd>Ctrl</kbd>+<kbd>T</kbd> is pressed, `live-translate.lua`:
    `ytdl://` are refused), and makes a local path absolute.
 2. Makes sure mpv has a JSON IPC server. It reuses `input-ipc-server` if one is already set,
    otherwise opens `\\.\pipe\mlt-<pid>` on Windows or `/tmp/mlt-<pid>.sock` elsewhere.
-3. Runs `live-translate serve --ipc <path> --file <video> [--ffmpeg …] [--debug]` as an async
+3. Runs `transcript serve --ipc <path> --file <video> [--ffmpeg …] [--debug]` as an async
    subprocess. The `executable` and `ffmpeg` paths come from `script-opts/live_translate.conf`,
    which `install-mpv-script` fills in, because mpv started from a file manager often doesn't see the
    user's `PATH`.
@@ -337,6 +338,19 @@ window's context, the real totals are slightly above "minutes watched × rate".
 for one run. `serve` reads the config each time it is started, so changes apply on the next
 <kbd>Ctrl</kbd>+<kbd>T</kbd>.
 
+## Updating
+
+`transcript update` runs `uv tool upgrade mpv-live-translate`, then `transcript install-mpv-script`
+in a **new process**, so the Lua script comes from the version just installed rather than the one
+still running. `--mpv-dir` is passed through for portable mpv installs.
+
+On Windows, uv copies tool executables instead of symlinking them, and a running `.exe` can't be
+replaced. So `update` starts the upgrade in a new PowerShell window and exits. That window waits for
+the `transcript` process that launched it, then for any `transcript serve` started by mpv (press
+<kbd>Ctrl</kbd>+<kbd>T</kbd> or close mpv), and only then runs the two steps. The values reach the
+script through environment variables and the script itself through `-EncodedCommand`, so nothing
+needs PowerShell quoting.
+
 ## Debugging
 
 Pipeline steps emit events through `DebugLog`: seam choices, ffmpeg timings and sizes, Scribe
@@ -353,7 +367,7 @@ whole pipeline (ffmpeg, seams, cues, cache, output, mpv tracks) at no cost:
 
 ```sh
 uv run pytest
-uv run live-translate generate some-video.mkv --fake
+uv run transcript generate some-video.mkv --fake
 ```
 
 The tests in `tests/` cover the scheduler, seams, cues, prompt building and validation, the cache and

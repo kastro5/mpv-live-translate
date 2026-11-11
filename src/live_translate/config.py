@@ -13,8 +13,8 @@ MODES = ("lookahead", "full")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 TEMPLATE = """\
-# live-translate settings. `live-translate setup` writes this file; edit it any time with
-# `live-translate config --edit`. API keys can also come from the ELEVENLABS_API_KEY and
+# live-translate settings. `transcript setup` writes this file; edit it any time with
+# `transcript config --edit`. API keys can also come from the ELEVENLABS_API_KEY and
 # ANTHROPIC_API_KEY environment variables, which take precedence over this file.
 
 [keys]
@@ -135,4 +135,4 @@ def save(config, path=None):
 def require_keys(config):
     missing = [name for name, key in (("ElevenLabs", config.elevenlabs_key), ("Anthropic", config.anthropic_key)) if not key]
     if missing:
-        raise ConfigError(f"Missing {' and '.join(missing)} API key. Run `live-translate setup` to add it.")
+        raise ConfigError(f"Missing {' and '.join(missing)} API key. Run `transcript setup` to add it.")

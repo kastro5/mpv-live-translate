@@ -1,4 +1,4 @@
-"""`live-translate setup`: guided first run. Asks for keys (checked with free API calls),
+"""`transcript setup`: guided first run. Asks for keys (checked with free API calls),
 target language and model, writes config.toml and installs the mpv script."""
 
 import dataclasses
@@ -90,7 +90,7 @@ def run_setup(ask=input, ask_secret=getpass.getpass, say=print, checks=(check_el
         say(f"Existing config has a problem ({e}); starting from defaults.")
         current = cfg.Config()
 
-    say("live-translate setup. Press Enter to keep the value in brackets.\n")
+    say("transcript setup. Press Enter to keep the value in brackets.\n")
     say("Keys: https://elevenlabs.io/app/settings/api-keys and https://platform.claude.com/settings/keys")
     elevenlabs = ask_key("ElevenLabs", current.elevenlabs_key, checks[0], ask_secret, say)
     anthropic_key = ask_key("Anthropic", current.anthropic_key, checks[1], ask_secret, say)
@@ -119,7 +119,7 @@ def run_setup(ask=input, ask_secret=getpass.getpass, say=print, checks=(check_el
 
     mpv_dir = mpv_dir or mpv_config_dir()
     say("\nFor a portable mpv (a portable_config folder next to mpv.exe), answer n and run")
-    say("`live-translate install-mpv-script --mpv-dir <path to portable_config>` instead.")
+    say("`transcript install-mpv-script --mpv-dir <path to portable_config>` instead.")
     if ask_yes(f"Install or update the mpv script in {mpv_dir}?", True, ask):
         do_install(mpv_dir, hint=False)
     if make_shortcut and ask_yes("Create a desktop shortcut that plays a copied link with live-translate?", True, ask):

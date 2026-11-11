@@ -1,4 +1,4 @@
-"""`live-translate install-mpv-script`: put the Lua script in mpv's scripts folder and point it
+"""`transcript install-mpv-script`: put the Lua script in mpv's scripts folder and point it
 at this installation (mpv started from Explorer/Finder often doesn't see the user's PATH)."""
 
 import os
@@ -43,7 +43,7 @@ def script_source():
 
 
 def executable():
-    found = shutil.which("live-translate")
+    found = shutil.which("transcript")
     if found:
         return str(Path(found).resolve())
     return str(Path(sys.argv[0]).resolve())
@@ -74,7 +74,7 @@ def install(mpv_dir=None, hint=True):
     if not ffmpeg:
         print("Warning: ffmpeg not found on PATH. Install it, then run this again (or set ffmpeg= in the file above).")
     if hint:
-        print("Next: run `live-translate setup` if you haven't yet, then press Ctrl+T in mpv.")
+        print("Next: run `transcript setup` if you haven't yet, then press Ctrl+T in mpv.")
 
 
 def shortcut(mpv=None):
@@ -84,7 +84,7 @@ def shortcut(mpv=None):
         print(f"Desktop shortcuts are only made on Windows. The equivalent command:\n  mpv {MPV_ARGS}")
         return
     if not found:
-        raise ConfigError("mpv.exe not found on PATH. Pass its location: live-translate shortcut --mpv <path>")
+        raise ConfigError("mpv.exe not found on PATH. Pass its location: transcript shortcut --mpv <path>")
     exe = str(Path(found).resolve())
     env = {**os.environ, "LT_NAME": SHORTCUT, "LT_MPV": exe, "LT_ARGS": MPV_ARGS}
     done = subprocess.run(

@@ -1,22 +1,22 @@
 -- live-translate.lua: press Ctrl+T in mpv to generate translated subtitles just ahead of
--- the playhead. The work happens in the `live-translate` Python command; this script only
+-- the playhead. The work happens in the `transcript` Python command; this script only
 -- starts and stops it. https://github.com/kastro5/mpv-live-translate
 --
--- Options go in script-opts/live_translate.conf (written by `live-translate install-mpv-script`):
---   executable=C:\Users\me\.local\bin\live-translate.exe
+-- Options go in script-opts/live_translate.conf (written by `transcript install-mpv-script`):
+--   executable=C:\Users\me\.local\bin\transcript.exe
 --   ffmpeg=C:\ffmpeg\bin\ffmpeg.exe
 --   key=ctrl+t
 --   debug=no          (yes: same as debug = true in live-translate's config.toml)
 --   debug_key=ctrl+T  (Ctrl+Shift+T shows/hides the debug panel while running)
 --   clipboard=no      (yes: on startup, open the link or path on the clipboard and start
---                      translating; the `live-translate shortcut` desktop shortcut sets this)
+--                      translating; the `transcript shortcut` desktop shortcut sets this)
 
 local mp = require "mp"
 local utils = require "mp.utils"
 local options = require "mp.options"
 
 local opts = {
-    executable = "live-translate", ffmpeg = "", key = "ctrl+t", debug = false, debug_key = "ctrl+T", clipboard = false,
+    executable = "transcript", ffmpeg = "", key = "ctrl+t", debug = false, debug_key = "ctrl+T", clipboard = false,
 }
 options.read_options(opts, "live_translate")
 
@@ -88,7 +88,7 @@ local function start()
         if not success or result.status ~= 0 then
             local reason = last_line(result and result.stderr) or err or result.error_string or "unknown error"
             if result and result.error_string == "init" then
-                reason = "could not run '" .. opts.executable .. "'. Run `live-translate install-mpv-script`."
+                reason = "could not run '" .. opts.executable .. "'. Run `transcript install-mpv-script`."
             end
             mp.osd_message("live-translate: " .. reason, 8)
             mp.msg.error(reason)

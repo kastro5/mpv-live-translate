@@ -1,5 +1,5 @@
-"""live-translate command line: generate, serve (started by the mpv script), setup, config,
-install-mpv-script, shortcut."""
+"""transcript command line (the live-translate tool): generate, serve (started by the mpv script),
+setup, config, install-mpv-script, shortcut, update."""
 
 import argparse
 import asyncio
@@ -78,7 +78,7 @@ def show_config(args):
     path = cfg.config_path()
     if not path.exists():
         cfg.save(cfg.Config(), path)
-        print(f"Created {path} (run `live-translate setup` to fill it in interactively)")
+        print(f"Created {path} (run `transcript setup` to fill it in interactively)")
     else:
         print(path)
     print(f"Cache: {cfg.cache_dir()}")
@@ -87,7 +87,7 @@ def show_config(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="live-translate")
+    parser = argparse.ArgumentParser(prog="transcript")
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p):
@@ -118,6 +118,9 @@ def main(argv=None):
     p = sub.add_parser("shortcut", help="desktop shortcut that plays the copied link with live-translate (Windows)")
     p.add_argument("--mpv", help="path to mpv.exe if it isn't on PATH")
 
+    p = sub.add_parser("update", help="upgrade to the latest version and reinstall the mpv script")
+    p.add_argument("--mpv-dir", type=Path, help="mpv config dir, if you installed the script with --mpv-dir")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
@@ -140,7 +143,11 @@ def main(argv=None):
             from .install import shortcut
 
             shortcut(args.mpv)
+        elif args.command == "update":
+            from .update import update
+
+            update(args.mpv_dir)
     except (cfg.ConfigError, AudioError, LinkError, FatalError) as e:
-        sys.exit(f"live-translate: {e}")
+        sys.exit(f"transcript: {e}")
     except KeyboardInterrupt:
         sys.exit(130)

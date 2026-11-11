@@ -1,4 +1,4 @@
-"""`live-translate serve`: follow an mpv player and keep its subtitle tracks up to date."""
+"""`transcript serve`: follow an mpv player and keep its subtitle tracks up to date."""
 
 import asyncio
 import time

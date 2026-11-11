@@ -52,7 +52,7 @@ is enough).
 
 ```sh
 uv tool install git+https://github.com/kastro5/mpv-live-translate
-live-translate setup
+transcript setup
 ```
 
 `setup` asks for your keys (and checks them), the language to translate into and the model, then
@@ -69,22 +69,32 @@ winget install astral-sh.uv
 winget install shinchiro.mpv
 # close and reopen PowerShell so the new commands are on PATH
 uv tool install git+https://github.com/kastro5/mpv-live-translate
-live-translate setup
+transcript setup
 ```
 
 - Use plain mpv (the `shinchiro.mpv` build above). mpv.net is a different player with its own
   config folder and key bindings, and isn't tested.
 - If your mpv folder has a `portable_config` folder next to `mpv.exe`, mpv reads its settings from
   there: answer *n* when `setup` offers to install the script and run
-  `live-translate install-mpv-script --mpv-dir "C:\path\to\mpv\portable_config"` instead.
+  `transcript install-mpv-script --mpv-dir "C:\path\to\mpv\portable_config"` instead.
 - To open videos in mpv by double-clicking, right-click a video → *Open with* → *Choose another
   app* → mpv.
 
 ### Updating
 
 ```sh
+transcript update
+```
+
+That upgrades to the latest version and reinstalls the mpv script. On Windows it finishes in its own
+window, after mpv's live-translate has stopped. If you installed the script with `--mpv-dir`, pass
+the same `--mpv-dir` to `update`.
+
+Before 0.3.0 the command was called `live-translate`. To move from such a version, run once:
+
+```sh
 uv tool upgrade mpv-live-translate
-live-translate install-mpv-script
+transcript install-mpv-script
 ```
 
 ## Use
@@ -114,7 +124,7 @@ running 13 Claude, 14 Scribe
 
 With `debug = true` in the settings (or answering *y* in `setup`), the panel is shown from the
 start and every event is also written to a log file (its path is on the panel's last line) under the
-cache folder's `logs/`. `live-translate generate --debug` prints the same events in the terminal. If something goes
+cache folder's `logs/`. `transcript generate --debug` prints the same events in the terminal. If something goes
 wrong, that log file is the thing to attach to an issue.
 
 ### Ahead of time
@@ -122,7 +132,7 @@ wrong, that log file is the thing to attach to an issue.
 Whole files can also be done ahead of time without mpv:
 
 ```sh
-live-translate generate movie.mkv
+transcript generate movie.mkv
 ```
 
 That fills the same cache, so playing the file afterwards is instant and free.
@@ -136,7 +146,7 @@ Direct `http(s)` links to a video file work too, for example a cloud drive's dow
    to play the copied link.
 3. Press <kbd>Ctrl</kbd>+<kbd>T</kbd> as usual.
 
-On Windows, `live-translate shortcut` (also offered by `setup`) puts a **Translate copied link**
+On Windows, `transcript shortcut` (also offered by `setup`) puts a **Translate copied link**
 shortcut on the desktop that does steps 2 and 3 in one go: copy a link, open the shortcut. It needs
 mpv 0.40 or newer. It also works with a copied file path.
 
@@ -153,11 +163,11 @@ Things that differ from local files:
 - The link has to point at the video file itself and allow seeking. Web pages (YouTube and the
   like) don't work.
 
-`live-translate generate "<link>"` works on links as well.
+`transcript generate "<link>"` works on links as well.
 
 ## Settings
 
-`live-translate setup` covers the common ones. For the rest, `live-translate config --edit` opens
+`transcript setup` covers the common ones. For the rest, `transcript config --edit` opens
 `config.toml` in a text editor (Notepad on Windows):
 
 ```toml
@@ -190,10 +200,10 @@ the keys (`key=ctrl+t`, `debug_key=ctrl+T`) and the paths `install-mpv-script` w
 - **Nothing happens on Ctrl+T:** check that `live-translate.lua` is in mpv's `scripts` folder
   (`%APPDATA%\mpv\scripts` on Windows, or `portable_config\scripts`). Another script or your
   `input.conf` may also use Ctrl+T; change `key=` in `live_translate.conf`.
-- **"could not run 'live-translate'":** run `live-translate install-mpv-script` again so the script
+- **"could not run 'transcript'":** run `transcript install-mpv-script` again so the script
   knows where the command is.
 - **"the link stopped working":** the link expired. Copy a fresh one and open it again.
-- **"Missing … API key" or a quota/credits message:** run `live-translate setup`, or top up the
+- **"Missing … API key" or a quota/credits message:** run `transcript setup`, or top up the
   account it names.
 - **Anything else:** turn on debug, reproduce it, and attach the log file to an issue.
 
@@ -215,14 +225,14 @@ Anthropic. Nothing is sent until you press the key.
 ```sh
 uv sync
 uv run pytest
-uv run live-translate generate some-video.mkv --fake   # whole pipeline, no API calls
+uv run transcript generate some-video.mkv --fake   # whole pipeline, no API calls
 ```
 
 `--fake` also works with `serve`, which is how the mpv integration was tested headlessly.
 
 ### Manual test checklist (Windows)
 
-1. `uv tool install`, then `live-translate setup` with debug on.
+1. `uv tool install`, then `transcript setup` with debug on.
 2. Open a Japanese video in mpv, press Ctrl+T: "started", then subtitles within about 10 seconds.
 3. Seek forward 10 minutes: subtitles catch up within a few seconds.
 4. Pause for 3 minutes: the cost on screen stops rising.
